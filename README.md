@@ -29,3 +29,4 @@
 - 資料表已啟用 Row Level Security，每位使用者只能操作自己的遊戲與內容。
 - 封面圖片限制為 5 MB，且只能上傳到自己的資料夾。
 - `config.js` 只能使用 Publishable key 或舊版 anon key，絕對不可提交 service_role／secret key。
+- 前端使用頁面內部的 Auth 排隊鎖，避免 Chromium Web Locks 殭屍鎖造成登入永久等待。
