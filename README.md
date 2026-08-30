@@ -20,6 +20,8 @@
 4. 在 Source 選擇 **GitHub Actions**。
 5. 等待 Actions 中的 `Deploy Game Note to GitHub Pages` 完成。
 
+每次部署時，GitHub Actions 會自動替 JavaScript、設定檔與樣式加入新的版本號，避免瀏覽器繼續載入舊快取，不需要手動修改版本。
+
 網站網址通常為 `https://你的帳號.github.io/game_note_v2/`。
 
 ## 安全說明
