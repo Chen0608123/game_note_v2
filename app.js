@@ -136,7 +136,11 @@ function openGameModal() {
     e.preventDefault(); e.submitter.disabled = true; let coverUrl = null;
     if (input.files[0]) { try { coverUrl = await uploadCover(input.files[0]); } catch (error) { e.submitter.disabled = false; return message(`圖片上傳失敗：${error.message}`); } }
     const { error } = await db.from('games').insert({ user_id: state.user.id, name: document.querySelector('#gameName').value.trim(), cover_url: coverUrl });
-    if (error) { e.submitter.disabled = false; return message(`新增失敗：${error.message}`); }
+    if (error) {
+      e.submitter.disabled = false;
+      const schemaError = /schema cache|column of ['"]?games/i.test(error.message);
+      return message(schemaError ? '資料庫欄位尚未建立，請在 Supabase 執行 repair_schema.sql。' : `新增失敗：${error.message}`);
+    }
     closeModal(); await loadGames(); renderLibrary();
   };
 }

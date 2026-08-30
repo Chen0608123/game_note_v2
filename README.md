@@ -12,6 +12,8 @@
 
 若保留電子信箱驗證，使用者註冊後必須先點擊驗證信。開發初期也能在 Supabase 的 Authentication 設定中關閉 Confirm email。
 
+如果曾經自行建立過 `games` 或 `entries` 資料表，並出現 schema cache／缺少欄位錯誤，請在 SQL Editor 執行 `supabase/repair_schema.sql`，它會保留資料表並補齊網站需要的欄位。
+
 ## 2. 發布至 GitHub Pages
 
 1. 在 GitHub 建立名為 `game_note_v2` 的 repository。
