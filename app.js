@@ -1,23 +1,33 @@
 const app = document.querySelector('#app');
 const config = window.GAME_NOTE_CONFIG || {};
 const configured = config.supabaseUrl?.startsWith('https://') && config.supabasePublishableKey && !config.supabasePublishableKey.includes('請貼上');
-const db = configured ? window.supabase.createClient(config.supabaseUrl, config.supabasePublishableKey) : null;
+const sdkAvailable = Boolean(window.supabase?.createClient);
+const db = configured && sdkAvailable ? window.supabase.createClient(config.supabaseUrl, config.supabasePublishableKey) : null;
 const state = { user: null, view: 'login', currentGameId: null, tab: 'notes', search: '', games: [], loading: true };
+let startupError = '';
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[c]));
 const message = text => { document.querySelector('.notice')?.remove(); document.body.insertAdjacentHTML('beforeend', `<div class="notice">${escapeHtml(text)}</div>`); setTimeout(() => document.querySelector('.notice')?.remove(), 3500); };
 
 async function start() {
-  if (!configured) { state.loading = false; return renderLogin(); }
-  const { data } = await db.auth.getSession();
-  state.user = data.session?.user || null;
-  if (state.user) { state.view = 'library'; await loadGames(); }
-  state.loading = false; render();
-  db.auth.onAuthStateChange((_event, session) => { state.user = session?.user || null; });
+  render();
+  if (!configured) { startupError = '尚未設定 Supabase，請檢查 config.js。'; state.loading = false; return renderLogin(); }
+  if (!sdkAvailable) { startupError = 'Supabase 程式庫載入失敗，請確認網路連線後重新整理。'; state.loading = false; return renderLogin(); }
+  try {
+    const { data, error } = await db.auth.getSession();
+    if (error) throw error;
+    state.user = data.session?.user || null;
+    if (state.user) { state.view = 'library'; await loadGames(); }
+    db.auth.onAuthStateChange((_event, session) => { state.user = session?.user || null; });
+  } catch (error) {
+    startupError = `Supabase 連線失敗：${error.message || '請檢查專案設定'}`;
+  } finally {
+    state.loading = false; render();
+  }
 }
 function render() { if (state.loading) return app.innerHTML = '<div class="loading">載入中…</div>'; state.view === 'login' ? renderLogin() : state.view === 'library' ? renderLibrary() : renderDetail(); }
 
 function renderLogin() {
-  app.innerHTML = `<section class="login-page"><form class="login-card" id="loginForm"><h1 class="brand">GAME NOTE</h1><p class="tagline">收藏每一段遊戲旅程</p>${configured ? '' : '<p class="setup-warning">尚未設定 Supabase，請先依照 README.md 填寫 config.js。</p>'}<div class="field"><label for="email">電子信箱</label><input id="email" type="email" placeholder="name@gmail.com" required></div><div class="field"><label for="password">密碼</label><input id="password" type="password" placeholder="至少 6 個字元" required minlength="6"></div><button class="primary" type="submit" ${configured ? '' : 'disabled'}>登入</button><button class="text-button" id="signup" type="button" ${configured ? '' : 'disabled'}>第一次使用？建立帳號</button></form></section>`;
+  app.innerHTML = `<section class="login-page"><form class="login-card" id="loginForm"><h1 class="brand">GAME NOTE</h1><p class="tagline">收藏每一段遊戲旅程</p>${startupError ? `<p class="setup-warning">${escapeHtml(startupError)}</p>` : ''}<div class="field"><label for="email">電子信箱</label><input id="email" type="email" placeholder="name@gmail.com" required></div><div class="field"><label for="password">密碼</label><input id="password" type="password" placeholder="至少 6 個字元" required minlength="6"></div><button class="primary" type="submit" ${db ? '' : 'disabled'}>登入</button><button class="text-button" id="signup" type="button" ${db ? '' : 'disabled'}>第一次使用？建立帳號</button></form></section>`;
   document.querySelector('#loginForm').onsubmit = login;
   document.querySelector('#signup').onclick = signup;
 }
