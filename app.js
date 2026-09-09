@@ -104,7 +104,17 @@ async function signup(e) {
 async function loadGames() {
   const { data, error } = await db.from('games').select('*, entries(*)').order('created_at', { ascending: false });
   if (error) { message(`讀取失敗：${error.message}`); state.games = []; return; }
-  state.games = (data || []).map(g => ({ ...g, notes: g.entries.filter(x => x.kind === 'note'), memories: g.entries.filter(x => x.kind === 'memory') }));
+  state.games = (data || []).map(g => {
+    const gameId = g.id || g.game_id;
+    const entries = g.entries || [];
+    return {
+      ...g,
+      id: gameId,
+      id_column: g.id ? 'id' : 'game_id',
+      notes: entries.filter(x => x.kind === 'note'),
+      memories: entries.filter(x => x.kind === 'memory')
+    };
+  });
 }
 function renderLibrary() {
   const games = state.games.filter(g => g.name.toLowerCase().includes(state.search.toLowerCase()));
@@ -123,7 +133,7 @@ function gameCard(g) {
 async function deleteGame(id) {
   const game = state.games.find(item => item.id === id);
   if (!game || !window.confirm(`確定要刪除「${game.name}」嗎？\n遊戲內的筆記與紀念也會一起刪除。`)) return;
-  const { error } = await db.from('games').delete().eq('id', id);
+  const { error } = await db.from('games').delete().eq(game.id_column || 'id', id);
   if (error) return message(`刪除失敗：${error.message}`);
   const coverPath = getStoragePath(game.cover_url, 'game-covers');
   const mediaPaths = [...game.notes, ...game.memories].map(item => getStoragePath(item.media_url, 'entry-media')).filter(Boolean);
@@ -180,8 +190,9 @@ function openGameModal(game = null) {
     e.preventDefault(); e.submitter.disabled = true; let coverUrl = selectedCoverUrl;
     if (input.files[0]) { try { coverUrl = await uploadCover(input.files[0]); } catch (error) { e.submitter.disabled = false; return message(`圖片上傳失敗：${error.message}`); } }
     const values = { name: document.querySelector('#gameName').value.trim(), cover_url: coverUrl };
+    if (editing && !game.id) { e.submitter.disabled = false; return message('找不到遊戲識別碼，請執行最新版 repair_schema.sql。'); }
     const { error } = editing
-      ? await db.from('games').update(values).eq('id', game.id)
+      ? await db.from('games').update(values).eq(game.id_column || 'id', game.id)
       : await db.from('games').insert({ ...values, user_id: state.user.id });
     if (error) {
       e.submitter.disabled = false;
