@@ -29,6 +29,13 @@ let loginEmail = '';
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[c]));
 const isUuid = value => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
 const message = text => { document.querySelector('.notice')?.remove(); document.body.insertAdjacentHTML('beforeend', `<div class="notice">${escapeHtml(text)}</div>`); setTimeout(() => document.querySelector('.notice')?.remove(), 3500); };
+async function requireUserId() {
+  if (isUuid(state.user?.id)) return state.user.id;
+  const { data, error } = await db.auth.getUser();
+  if (error || !isUuid(data.user?.id)) throw new Error('登入狀態已失效，請登出後重新登入。');
+  state.user = data.user;
+  return data.user.id;
+}
 const withTimeout = (promise, seconds = 12) => Promise.race([
   promise,
   new Promise((_, reject) => setTimeout(() => reject(new Error('連線逾時，請確認 Supabase 專案目前為 Active 狀態。')), seconds * 1000))
@@ -137,7 +144,7 @@ async function deleteGame(id) {
   let deleteQuery = db.from('games').delete();
   deleteQuery = isUuid(game.id)
     ? deleteQuery.eq(game.id_column || 'id', game.id)
-    : deleteQuery.eq('user_id', state.user.id).eq('name', game.name);
+    : deleteQuery.eq('name', game.name);
   const { error } = await deleteQuery;
   if (error) return message(`刪除失敗：${error.message}`);
   const coverPath = getStoragePath(game.cover_url, 'game-covers');
@@ -196,14 +203,20 @@ function openGameModal(game = null) {
     if (input.files[0]) { try { coverUrl = await uploadCover(input.files[0]); } catch (error) { e.submitter.disabled = false; return message(`圖片上傳失敗：${error.message}`); } }
     const values = { name: document.querySelector('#gameName').value.trim(), cover_url: coverUrl };
     let result;
-    if (editing) {
-      let updateQuery = db.from('games').update(values);
-      updateQuery = isUuid(game.id)
-        ? updateQuery.eq(game.id_column || 'id', game.id)
-        : updateQuery.eq('user_id', state.user.id).eq('name', game.name);
-      result = await updateQuery;
-    } else {
-      result = await db.from('games').insert({ ...values, user_id: state.user.id });
+    try {
+      if (editing) {
+        let updateQuery = db.from('games').update(values);
+        updateQuery = isUuid(game.id)
+          ? updateQuery.eq(game.id_column || 'id', game.id)
+          : updateQuery.eq('name', game.name);
+        result = await updateQuery;
+      } else {
+        const userId = await requireUserId();
+        result = await db.from('games').insert({ ...values, user_id: userId });
+      }
+    } catch (requestError) {
+      e.submitter.disabled = false;
+      return message(requestError.message);
     }
     const { error } = result;
     if (error) {
@@ -228,7 +241,8 @@ async function searchGameCovers(name) {
 }
 async function uploadCover(file) {
   if (file.size > 5 * 1024 * 1024) throw new Error('圖片不可超過 5MB');
-  const ext = (file.name.split('.').pop() || 'jpg').replace(/[^a-z0-9]/gi, ''), path = `${state.user.id}/${crypto.randomUUID()}.${ext}`;
+  const userId = await requireUserId();
+  const ext = (file.name.split('.').pop() || 'jpg').replace(/[^a-z0-9]/gi, ''), path = `${userId}/${crypto.randomUUID()}.${ext}`;
   const { error } = await db.storage.from('game-covers').upload(path, file, { cacheControl: '3600' }); if (error) throw error;
   return db.storage.from('game-covers').getPublicUrl(path).data.publicUrl;
 }
@@ -255,7 +269,10 @@ function openEntryModal(game) {
       try { mediaUrl = await uploadEntryMedia(file, entryType); }
       catch (error) { e.submitter.disabled = false; return message(`檔案上傳失敗：${error.message}`); }
     }
-    const row = { game_id: game.id, user_id: state.user.id, kind: isNote ? 'note' : 'memory', entry_type: entryType, title: document.querySelector('#entryTitle').value.trim(), content: document.querySelector('#entryContent').value.trim(), link_url: linkUrl, media_url: mediaUrl };
+    let userId;
+    try { userId = await requireUserId(); }
+    catch (error) { e.submitter.disabled = false; return message(error.message); }
+    const row = { game_id: game.id, user_id: userId, kind: isNote ? 'note' : 'memory', entry_type: entryType, title: document.querySelector('#entryTitle').value.trim(), content: document.querySelector('#entryContent').value.trim(), link_url: linkUrl, media_url: mediaUrl };
     const { error } = await db.from('entries').insert(row); if (error) { e.submitter.disabled = false; return message(`新增失敗：${error.message}`); }
     closeModal(); await loadGames(); render();
   };
@@ -265,8 +282,9 @@ async function uploadEntryMedia(file, type) {
   if (file.size > maxSize) throw new Error(`${type}不可超過 ${type === '影片' ? '50' : '10'} MB`);
   if (type === '圖片' && !file.type.startsWith('image/')) throw new Error('請選擇圖片檔案');
   if (type === '影片' && !file.type.startsWith('video/')) throw new Error('請選擇影片檔案');
+  const userId = await requireUserId();
   const ext = (file.name.split('.').pop() || 'bin').replace(/[^a-z0-9]/gi, '');
-  const path = `${state.user.id}/${crypto.randomUUID()}.${ext}`;
+  const path = `${userId}/${crypto.randomUUID()}.${ext}`;
   const { error } = await db.storage.from('entry-media').upload(path, file, { cacheControl: '3600', contentType: file.type });
   if (error) throw error;
   return db.storage.from('entry-media').getPublicUrl(path).data.publicUrl;
