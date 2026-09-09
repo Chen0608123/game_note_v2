@@ -27,8 +27,9 @@ jobs:
         shell: bash
         run: |
           mkdir _site
-          cp index.html style.css app.js config.js .nojekyll _site/
+          cp index.html style.css app.js config.js _site/
           cp -R page_example _site/page_example
+          touch _site/.nojekyll
           sed -i "s/__BUILD_VERSION__/${GITHUB_SHA}/g" _site/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
