@@ -12,6 +12,20 @@ alter table public.games add column if not exists name text;
 alter table public.games add column if not exists cover_url text;
 alter table public.games add column if not exists created_at timestamptz default now();
 
+-- 相容舊版使用 title 作為遊戲名稱的資料表。
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'games'
+      and column_name = 'title'
+  ) then
+    execute 'update public.games set name = title where name is null and title is not null';
+    execute 'alter table public.games alter column title drop not null';
+  end if;
+end $$;
+
 create table if not exists public.entries (
   id uuid primary key default gen_random_uuid()
 );
@@ -23,6 +37,7 @@ alter table public.entries add column if not exists entry_type text default '文
 alter table public.entries add column if not exists title text;
 alter table public.entries add column if not exists content text default '';
 alter table public.entries add column if not exists link_url text;
+alter table public.entries add column if not exists media_url text;
 alter table public.entries add column if not exists created_at timestamptz default now();
 
 create index if not exists games_user_id_idx on public.games(user_id);
@@ -86,6 +101,38 @@ drop policy if exists "owners delete own covers" on storage.objects;
 create policy "owners delete own covers" on storage.objects
   for delete to authenticated using (
     bucket_id = 'game-covers' and owner_id = (select auth.uid())::text
+  );
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'entry-media',
+  'entry-media',
+  true,
+  52428800,
+  array['image/jpeg','image/png','image/webp','image/gif','video/mp4','video/webm','video/quicktime']
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "authenticated users upload own entry media" on storage.objects;
+create policy "authenticated users upload own entry media" on storage.objects
+  for insert to authenticated with check (
+    bucket_id = 'entry-media'
+    and (storage.foldername(name))[1] = (select auth.uid())::text
+  );
+
+drop policy if exists "owners update own entry media" on storage.objects;
+create policy "owners update own entry media" on storage.objects
+  for update to authenticated using (
+    bucket_id = 'entry-media' and owner_id = (select auth.uid())::text
+  );
+
+drop policy if exists "owners delete own entry media" on storage.objects;
+create policy "owners delete own entry media" on storage.objects
+  for delete to authenticated using (
+    bucket_id = 'entry-media' and owner_id = (select auth.uid())::text
   );
 
 -- 要求 Supabase Data API 立即重新讀取資料表結構。

@@ -18,6 +18,7 @@ create table if not exists public.entries (
   title text not null check (char_length(title) between 1 and 150),
   content text not null default '',
   link_url text,
+  media_url text,
   created_at timestamptz not null default now()
 );
 
@@ -59,4 +60,21 @@ create policy "owners update own covers" on storage.objects
 create policy "owners delete own covers" on storage.objects
   for delete to authenticated using (
     bucket_id = 'game-covers' and owner_id = (select auth.uid())::text
+  );
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('entry-media', 'entry-media', true, 52428800, array['image/jpeg','image/png','image/webp','image/gif','video/mp4','video/webm','video/quicktime'])
+on conflict (id) do update set public = excluded.public, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
+create policy "authenticated users upload own entry media" on storage.objects
+  for insert to authenticated with check (
+    bucket_id = 'entry-media' and (storage.foldername(name))[1] = (select auth.uid())::text
+  );
+create policy "owners update own entry media" on storage.objects
+  for update to authenticated using (
+    bucket_id = 'entry-media' and owner_id = (select auth.uid())::text
+  );
+create policy "owners delete own entry media" on storage.objects
+  for delete to authenticated using (
+    bucket_id = 'entry-media' and owner_id = (select auth.uid())::text
   );

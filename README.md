@@ -2,6 +2,8 @@
 
 遊戲筆記與紀念收藏網站，使用 GitHub Pages 發布前端，Supabase 提供登入、PostgreSQL 資料庫與圖片儲存。
 
+新增或編輯遊戲時，可透過 Wikipedia PageImages 自動搜尋候選圖片，也可自行上傳封面覆蓋搜尋結果。
+
 ## 1. 建立 Supabase 專案
 
 1. 到 Supabase 建立新專案。
@@ -30,5 +32,6 @@
 
 - 資料表已啟用 Row Level Security，每位使用者只能操作自己的遊戲與內容。
 - 封面圖片限制為 5 MB，且只能上傳到自己的資料夾。
+- 筆記與紀念圖片限制為 10 MB，影片限制為 50 MB；媒體檔案只能上傳到登入者自己的資料夾。
 - `config.js` 只能使用 Publishable key 或舊版 anon key，絕對不可提交 service_role／secret key。
 - 前端使用頁面內部的 Auth 排隊鎖，避免 Chromium Web Locks 殭屍鎖造成登入永久等待。
