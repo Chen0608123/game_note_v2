@@ -27,6 +27,7 @@ const state = { user: null, view: 'login', currentGameId: null, tab: 'notes', se
 let startupError = '';
 let loginEmail = '';
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[c]));
+const isUuid = value => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
 const message = text => { document.querySelector('.notice')?.remove(); document.body.insertAdjacentHTML('beforeend', `<div class="notice">${escapeHtml(text)}</div>`); setTimeout(() => document.querySelector('.notice')?.remove(), 3500); };
 const withTimeout = (promise, seconds = 12) => Promise.race([
   promise,
@@ -131,9 +132,13 @@ function gameCard(g) {
   return `<article class="game-card"><button class="game-open" data-game="${g.id}" aria-label="開啟 ${escapeHtml(g.name)}"><span class="game-cover">${cover}</span></button><div class="game-card-footer"><span class="game-name">${escapeHtml(g.name)}</span><button class="game-delete" data-delete-game="${g.id}" type="button" aria-label="刪除 ${escapeHtml(g.name)}" title="刪除遊戲">✕</button></div></article>`;
 }
 async function deleteGame(id) {
-  const game = state.games.find(item => item.id === id);
+  const game = state.games.find(item => String(item.id) === String(id));
   if (!game || !window.confirm(`確定要刪除「${game.name}」嗎？\n遊戲內的筆記與紀念也會一起刪除。`)) return;
-  const { error } = await db.from('games').delete().eq(game.id_column || 'id', id);
+  let deleteQuery = db.from('games').delete();
+  deleteQuery = isUuid(game.id)
+    ? deleteQuery.eq(game.id_column || 'id', game.id)
+    : deleteQuery.eq('user_id', state.user.id).eq('name', game.name);
+  const { error } = await deleteQuery;
   if (error) return message(`刪除失敗：${error.message}`);
   const coverPath = getStoragePath(game.cover_url, 'game-covers');
   const mediaPaths = [...game.notes, ...game.memories].map(item => getStoragePath(item.media_url, 'entry-media')).filter(Boolean);
@@ -190,14 +195,21 @@ function openGameModal(game = null) {
     e.preventDefault(); e.submitter.disabled = true; let coverUrl = selectedCoverUrl;
     if (input.files[0]) { try { coverUrl = await uploadCover(input.files[0]); } catch (error) { e.submitter.disabled = false; return message(`圖片上傳失敗：${error.message}`); } }
     const values = { name: document.querySelector('#gameName').value.trim(), cover_url: coverUrl };
-    if (editing && !game.id) { e.submitter.disabled = false; return message('找不到遊戲識別碼，請執行最新版 repair_schema.sql。'); }
-    const { error } = editing
-      ? await db.from('games').update(values).eq(game.id_column || 'id', game.id)
-      : await db.from('games').insert({ ...values, user_id: state.user.id });
+    let result;
+    if (editing) {
+      let updateQuery = db.from('games').update(values);
+      updateQuery = isUuid(game.id)
+        ? updateQuery.eq(game.id_column || 'id', game.id)
+        : updateQuery.eq('user_id', state.user.id).eq('name', game.name);
+      result = await updateQuery;
+    } else {
+      result = await db.from('games').insert({ ...values, user_id: state.user.id });
+    }
+    const { error } = result;
     if (error) {
       e.submitter.disabled = false;
       const schemaError = /schema cache|column of ['"]?games/i.test(error.message);
-      return message(schemaError ? '資料庫欄位尚未建立，請在 Supabase 執行 repair_schema.sql。' : `新增失敗：${error.message}`);
+      return message(schemaError ? '資料庫欄位尚未建立，請在 Supabase 執行 repair_schema.sql。' : `${editing ? '修改' : '新增'}失敗：${error.message}`);
     }
     closeModal(); await loadGames(); editing ? render() : renderLibrary();
   };
