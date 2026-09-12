@@ -191,7 +191,7 @@ function entryMedia(item, detail = false) {
 function entryCard(item, index) {
   const media = entryMedia(item);
   const link = item.link_url ? `<a class="entry-link" href="${escapeHtml(item.link_url)}" target="_blank" rel="noreferrer">開啟${item.entry_type === '影片' ? '影片' : '連結'} ↗</a>` : '';
-  return `<article class="entry entry-clickable" data-view-entry="${index}" role="button" tabindex="0" aria-label="查看 ${escapeHtml(item.title)}"><button class="delete" data-delete="${item.id}" aria-label="刪除">✕</button>${media}<h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.content)}</p>${link}</article>`;
+  return `<article class="entry entry-clickable" data-view-entry="${index}" role="button" tabindex="0" aria-label="查看 ${escapeHtml(item.title)}"><button class="delete" data-delete="${item.id}" aria-label="刪除">✕</button><h3>${escapeHtml(item.title)}</h3>${media}<p>${escapeHtml(item.content)}</p>${link}</article>`;
 }
 function openEntryDetail(item, label) {
   if (!item) return;
