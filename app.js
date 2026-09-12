@@ -163,19 +163,41 @@ function getStoragePath(url, bucket) {
 function renderDetail() {
   const game = state.games.find(g => g.id === state.currentGameId); if (!game) { state.view = 'library'; return render(); }
   const list = state.tab === 'notes' ? game.notes : game.memories, label = state.tab === 'notes' ? '筆記' : '紀念';
-  app.innerHTML = `<section class="detail-page"><header class="detail-header"><button class="back" id="back">← 回到首頁</button><h1 class="detail-title">${escapeHtml(game.name)} 的 NOTE</h1><div class="detail-game"><span>${escapeHtml(game.name)}</span><button class="edit-game" id="editGame" type="button">編輯遊戲</button></div></header><nav class="tabs"><button class="tab ${state.tab === 'notes' ? 'active' : ''}" data-tab="notes">筆記</button><button class="tab ${state.tab === 'memories' ? 'active' : ''}" data-tab="memories">紀念</button></nav><div class="section-head"><h2>${label}收藏</h2><button class="primary" id="addEntry">＋ 新增${label}</button></div><div class="entries">${list.length ? list.map(entryCard).join('') : `<div class="empty">目前還沒有${label}</div>`}</div></section>`;
+  app.innerHTML = `<section class="detail-page"><header class="detail-header"><button class="back" id="back">← 回到首頁</button><h1 class="detail-title">${escapeHtml(game.name)} 的 NOTE</h1><div class="detail-game"><span>${escapeHtml(game.name)}</span><button class="edit-game" id="editGame" type="button">編輯遊戲</button></div></header><nav class="tabs"><button class="tab ${state.tab === 'notes' ? 'active' : ''}" data-tab="notes">筆記</button><button class="tab ${state.tab === 'memories' ? 'active' : ''}" data-tab="memories">紀念</button></nav><div class="section-head"><h2>${label}收藏</h2><button class="primary" id="addEntry">＋ 新增${label}</button></div><div class="entries">${list.length ? list.map((item, index) => entryCard(item, index)).join('') : `<div class="empty">目前還沒有${label}</div>`}</div></section>`;
   document.querySelector('#back').onclick = () => { state.view = 'library'; render(); };
   document.querySelector('#editGame').onclick = () => openGameModal(game);
   document.querySelectorAll('[data-tab]').forEach(el => el.onclick = () => { state.tab = el.dataset.tab; render(); });
   document.querySelector('#addEntry').onclick = () => openEntryModal(game);
   document.querySelectorAll('[data-delete]').forEach(el => el.onclick = () => deleteEntry(el.dataset.delete));
+  document.querySelectorAll('[data-view-entry]').forEach(card => {
+    card.onclick = event => {
+      if (event.target.closest('button, a, video')) return;
+      openEntryDetail(list[Number(card.dataset.viewEntry)], label);
+    };
+    card.onkeydown = event => {
+      if ((event.key === 'Enter' || event.key === ' ') && event.target === card) {
+        event.preventDefault();
+        openEntryDetail(list[Number(card.dataset.viewEntry)], label);
+      }
+    };
+  });
 }
-function entryCard(item) {
-  let media = '';
-  if (item.entry_type === '圖片' && item.media_url) media = `<img class="entry-media" src="${escapeHtml(item.media_url)}" alt="${escapeHtml(item.title)}">`;
-  if (item.entry_type === '影片' && item.media_url) media = `<video class="entry-media" src="${escapeHtml(item.media_url)}" controls preload="metadata"></video>`;
+function entryMedia(item, detail = false) {
+  const mediaClass = detail ? 'detail-media' : 'entry-media';
+  if (item.entry_type === '圖片' && item.media_url) return `<img class="${mediaClass}" src="${escapeHtml(item.media_url)}" alt="${escapeHtml(item.title)}">`;
+  if (item.entry_type === '影片' && item.media_url) return `<video class="${mediaClass}" src="${escapeHtml(item.media_url)}" controls preload="metadata"></video>`;
+  return '';
+}
+function entryCard(item, index) {
+  const media = entryMedia(item);
   const link = item.link_url ? `<a class="entry-link" href="${escapeHtml(item.link_url)}" target="_blank" rel="noreferrer">開啟${item.entry_type === '影片' ? '影片' : '連結'} ↗</a>` : '';
-  return `<article class="entry"><button class="delete" data-delete="${item.id}" aria-label="刪除">✕</button>${media}<h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.content)}</p>${link}</article>`;
+  return `<article class="entry entry-clickable" data-view-entry="${index}" role="button" tabindex="0" aria-label="查看 ${escapeHtml(item.title)}"><button class="delete" data-delete="${item.id}" aria-label="刪除">✕</button>${media}<h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.content)}</p>${link}</article>`;
+}
+function openEntryDetail(item, label) {
+  if (!item) return;
+  const media = entryMedia(item, true);
+  const link = item.link_url ? `<a class="detail-link primary" href="${escapeHtml(item.link_url)}" target="_blank" rel="noreferrer">開啟${item.entry_type === '影片' ? '影片' : '連結'} ↗</a>` : '';
+  showModal(`<article class="entry-detail"><div class="entry-detail-head"><span class="entry-detail-kind">${escapeHtml(label)}</span><button class="detail-close" data-close type="button" aria-label="關閉">✕</button></div><h2>${escapeHtml(item.title)}</h2><div class="entry-detail-content"><p>${escapeHtml(item.content)}</p>${media}${link}</div></article>`);
 }
 async function deleteEntry(id) { const { error } = await db.from('entries').delete().eq('id', id); if (error) return message(`刪除失敗：${error.message}`); await loadGames(); render(); }
 

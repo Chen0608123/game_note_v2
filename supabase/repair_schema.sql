@@ -7,10 +7,12 @@ create table if not exists public.games (
   id uuid primary key default gen_random_uuid()
 );
 
+alter table public.games add column if not exists id uuid default gen_random_uuid();
 alter table public.games add column if not exists user_id uuid references auth.users(id) on delete cascade;
 alter table public.games add column if not exists name text;
 alter table public.games add column if not exists cover_url text;
 alter table public.games add column if not exists created_at timestamptz default now();
+create unique index if not exists games_id_unique_idx on public.games(id);
 
 -- 相容舊版使用 title 作為遊戲名稱的資料表。
 do $$
@@ -30,6 +32,7 @@ create table if not exists public.entries (
   id uuid primary key default gen_random_uuid()
 );
 
+alter table public.entries add column if not exists id uuid default gen_random_uuid();
 alter table public.entries add column if not exists game_id uuid references public.games(id) on delete cascade;
 alter table public.entries add column if not exists user_id uuid references auth.users(id) on delete cascade;
 alter table public.entries add column if not exists kind text;
@@ -39,6 +42,7 @@ alter table public.entries add column if not exists content text default '';
 alter table public.entries add column if not exists link_url text;
 alter table public.entries add column if not exists media_url text;
 alter table public.entries add column if not exists created_at timestamptz default now();
+create unique index if not exists entries_id_unique_idx on public.entries(id);
 
 create index if not exists games_user_id_idx on public.games(user_id);
 create index if not exists entries_game_id_idx on public.entries(game_id);

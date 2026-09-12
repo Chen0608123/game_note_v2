@@ -75,6 +75,8 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .tab.active { color: white; background: var(--ink); }
 .entries { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px; }
 .entry { position: relative; min-height: 180px; padding: 22px; border: 1px solid var(--line); border-radius: 10px; background: #fffaf4; }
+.entry-clickable { cursor: pointer; transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
+.entry-clickable:hover, .entry-clickable:focus-visible { border-color: var(--accent); box-shadow: 0 10px 24px rgba(83,60,49,.12); outline: none; transform: translateY(-2px); }
 .entry h3 { margin: 0 0 12px; }
 .entry p { color: var(--muted); white-space: pre-wrap; }
 .entry-media { display: block; width: 100%; max-height: 280px; margin-bottom: 18px; border-radius: 8px; object-fit: cover; background: #181818; }
@@ -85,6 +87,15 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .modal-wrap { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 20px; background: rgba(40,32,29,.5); }
 .modal { width: min(600px, 100%); max-height: 92vh; overflow: auto; padding: 34px; border: 2px solid var(--ink); background: var(--paper); box-shadow: var(--shadow); }
 .modal h2 { margin-top: 0; }
+.entry-detail { min-height: 480px; }
+.entry-detail-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+.entry-detail-kind { color: var(--muted); font-weight: 700; letter-spacing: .12em; }
+.detail-close { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--line); border-radius: 50%; color: var(--muted); background: white; }
+.entry-detail > h2 { margin: 0; font-size: clamp(25px, 4vw, 36px); }
+.entry-detail-content { display: grid; justify-items: center; gap: 24px; padding: 48px 20px 20px; text-align: center; }
+.entry-detail-content p { max-width: 680px; margin: 0; color: var(--ink); font-size: 18px; line-height: 1.9; white-space: pre-wrap; }
+.detail-media { display: block; width: min(100%, 680px); max-height: 440px; border-radius: 10px; object-fit: contain; background: #181818; }
+.detail-link { display: inline-block; text-decoration: none; }
 .type-tabs { display: grid; grid-template-columns: repeat(3,1fr); margin: 24px 0; }
 .type-tabs button { padding: 14px; border: 1px solid var(--ink); background: white; }
 .type-tabs button.active { color: white; background: var(--ink); }
