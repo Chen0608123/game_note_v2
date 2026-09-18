@@ -28,8 +28,13 @@ const themeStorageKey = 'game-note-background-theme';
 function loadTheme() {
   try {
     const saved = JSON.parse(localStorage.getItem(themeStorageKey) || '{}');
-    return { mode: ['light', 'dark', 'custom'].includes(saved.mode) ? saved.mode : 'light', color: /^#[0-9a-f]{6}$/i.test(saved.color) ? saved.color : '#f5eee7' };
-  } catch { return { mode: 'light', color: '#f5eee7' }; }
+    return {
+      mode: ['light', 'dark', 'custom'].includes(saved.mode) ? saved.mode : 'light',
+      color: /^#[0-9a-f]{6}$/i.test(saved.color) ? saved.color : '#f5eee7',
+      noteTextSize: Number.isInteger(saved.noteTextSize) && saved.noteTextSize >= 14 && saved.noteTextSize <= 24 ? saved.noteTextSize : 16,
+      noteTitleSize: Number.isInteger(saved.noteTitleSize) && saved.noteTitleSize >= 18 && saved.noteTitleSize <= 36 ? saved.noteTitleSize : 20
+    };
+  } catch { return { mode: 'light', color: '#f5eee7', noteTextSize: 16, noteTitleSize: 20 }; }
 }
 let theme = loadTheme();
 function applyTheme() {
@@ -41,11 +46,23 @@ function applyTheme() {
   document.body.style.setProperty('--custom-ink', darkBackground ? '#fffaf6' : '#292523');
   document.body.style.setProperty('--custom-muted', darkBackground ? '#d8d0ca' : '#665e59');
   document.body.style.setProperty('--custom-line', darkBackground ? 'rgba(255,255,255,.35)' : 'rgba(41,37,35,.28)');
+  document.body.style.setProperty('--note-text-size', `${theme.noteTextSize}px`);
+  document.body.style.setProperty('--note-title-size', `${theme.noteTitleSize}px`);
+}
+function persistTheme() {
+  try { localStorage.setItem(themeStorageKey, JSON.stringify(theme)); } catch { /* Browser storage may be unavailable. */ }
 }
 function saveTheme(mode, color = theme.color) {
-  theme = { mode, color };
+  theme = { ...theme, mode, color };
   applyTheme();
-  try { localStorage.setItem(themeStorageKey, JSON.stringify(theme)); } catch { /* Browser storage may be unavailable. */ }
+  persistTheme();
+}
+function saveNoteSize(setting, value) {
+  const limits = setting === 'noteTextSize' ? [14, 24] : setting === 'noteTitleSize' ? [18, 36] : null;
+  if (!limits) return;
+  theme[setting] = Math.max(limits[0], Math.min(limits[1], Number(value)));
+  applyTheme();
+  persistTheme();
 }
 applyTheme();
 let startupError = '';
@@ -165,7 +182,7 @@ function openSettingsModal() {
     ['dark', '黑色背景', '適合夜間使用'],
     ['custom', '自訂背景色', '選擇喜歡的顏色']
   ];
-  showModal(`<div class="settings-panel"><h2>設定</h2><p class="settings-intro">背景顏色</p><div class="theme-options">${options.map(([mode, label, description]) => `<label class="theme-option"><input type="radio" name="backgroundTheme" value="${mode}" ${theme.mode === mode ? 'checked' : ''}><span class="theme-swatch theme-swatch-${mode}" ${mode === 'custom' ? `style="background:${theme.color}"` : ''}></span><span><strong>${label}</strong><small>${description}</small></span></label>`).join('')}</div><div class="custom-color-row"><label for="customBackground">選擇顏色</label><input id="customBackground" type="color" value="${theme.color}"><output id="customColorValue">${theme.color.toUpperCase()}</output></div><div class="actions"><button class="primary" data-close type="button">完成</button></div></div>`);
+  showModal(`<div class="settings-panel"><h2>設定</h2><p class="settings-intro">背景顏色</p><div class="theme-options">${options.map(([mode, label, description]) => `<label class="theme-option"><input type="radio" name="backgroundTheme" value="${mode}" ${theme.mode === mode ? 'checked' : ''}><span class="theme-swatch theme-swatch-${mode}" ${mode === 'custom' ? `style="background:${theme.color}"` : ''}></span><span><strong>${label}</strong><small>${description}</small></span></label>`).join('')}</div><div class="custom-color-row"><label for="customBackground">選擇顏色</label><input id="customBackground" type="color" value="${theme.color}"><output id="customColorValue">${theme.color.toUpperCase()}</output></div><div class="settings-divider"></div><p class="settings-intro">筆記字體大小</p><div class="font-setting"><label for="noteTextSize">筆記文字 <output id="noteTextSizeValue">${theme.noteTextSize}px</output></label><input id="noteTextSize" type="range" min="14" max="24" step="1" value="${theme.noteTextSize}"></div><div class="font-setting"><label for="noteTitleSize">筆記標題 <output id="noteTitleSizeValue">${theme.noteTitleSize}px</output></label><input id="noteTitleSize" type="range" min="18" max="36" step="1" value="${theme.noteTitleSize}"></div><div class="note-font-preview"><strong>筆記標題預覽</strong><p>這是筆記文字的顯示大小。</p></div><div class="actions"><button class="primary" data-close type="button">完成</button></div></div>`);
   document.querySelectorAll('input[name="backgroundTheme"]').forEach(input => {
     input.onchange = () => saveTheme(input.value);
   });
@@ -175,6 +192,12 @@ function openSettingsModal() {
     document.querySelector('.theme-swatch-custom').style.background = theme.color;
     document.querySelector('#customColorValue').textContent = theme.color.toUpperCase();
   };
+  ['noteTextSize', 'noteTitleSize'].forEach(setting => {
+    document.querySelector(`#${setting}`).oninput = event => {
+      saveNoteSize(setting, event.target.value);
+      document.querySelector(`#${setting}Value`).textContent = `${theme[setting]}px`;
+    };
+  });
 }
 function gameCard(g) {
   const cover = g.cover_url ? `<img src="${escapeHtml(g.cover_url)}" alt="${escapeHtml(g.name)}">` : escapeHtml(g.name.slice(0, 1).toUpperCase());
@@ -233,13 +256,13 @@ function entryMedia(item, detail = false) {
 function entryCard(item, index) {
   const media = entryMedia(item);
   const link = item.link_url ? `<a class="entry-link" href="${escapeHtml(item.link_url)}" target="_blank" rel="noreferrer">開啟${item.entry_type === '影片' ? '影片' : '連結'} ↗</a>` : '';
-  return `<article class="entry entry-clickable" data-view-entry="${index}" role="button" tabindex="0" aria-label="查看 ${escapeHtml(item.title)}"><button class="delete" data-delete="${item.id}" aria-label="刪除">✕</button><h3>${escapeHtml(item.title)}</h3>${media}<p>${escapeHtml(item.content)}</p>${link}</article>`;
+  return `<article class="entry entry-clickable ${item.kind === 'note' ? 'note-entry' : ''}" data-view-entry="${index}" role="button" tabindex="0" aria-label="查看 ${escapeHtml(item.title)}"><button class="delete" data-delete="${item.id}" aria-label="刪除">✕</button><h3>${escapeHtml(item.title)}</h3>${media}<p>${escapeHtml(item.content)}</p>${link}</article>`;
 }
 function openEntryDetail(item, label) {
   if (!item) return;
   const media = entryMedia(item, true);
   const link = item.link_url ? `<a class="detail-link primary" href="${escapeHtml(item.link_url)}" target="_blank" rel="noreferrer">開啟${item.entry_type === '影片' ? '影片' : '連結'} ↗</a>` : '';
-  showModal(`<article class="entry-detail"><div class="entry-detail-head"><span class="entry-detail-kind">${escapeHtml(label)}</span><button class="detail-close" data-close type="button" aria-label="關閉">✕</button></div><h2>${escapeHtml(item.title)}</h2><div class="entry-detail-content"><p>${escapeHtml(item.content)}</p>${media}${link}</div></article>`);
+  showModal(`<article class="entry-detail ${item.kind === 'note' ? 'note-entry-detail' : ''}"><div class="entry-detail-head"><span class="entry-detail-kind">${escapeHtml(label)}</span><button class="detail-close" data-close type="button" aria-label="關閉">✕</button></div><h2>${escapeHtml(item.title)}</h2><div class="entry-detail-content"><p>${escapeHtml(item.content)}</p>${media}${link}</div></article>`);
 }
 async function deleteEntry(id) { const { error } = await db.from('entries').delete().eq('id', id); if (error) return message(`刪除失敗：${error.message}`); await loadGames(); render(); }
 
