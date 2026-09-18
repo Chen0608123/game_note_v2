@@ -24,6 +24,30 @@ const db = configured && sdkAvailable ? window.supabase.createClient(
   }
 ) : null;
 const state = { user: null, view: 'login', currentGameId: null, tab: 'notes', search: '', games: [], loading: true };
+const themeStorageKey = 'game-note-background-theme';
+function loadTheme() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(themeStorageKey) || '{}');
+    return { mode: ['light', 'dark', 'custom'].includes(saved.mode) ? saved.mode : 'light', color: /^#[0-9a-f]{6}$/i.test(saved.color) ? saved.color : '#f5eee7' };
+  } catch { return { mode: 'light', color: '#f5eee7' }; }
+}
+let theme = loadTheme();
+function applyTheme() {
+  const color = theme.color;
+  const rgb = [1, 3, 5].map(index => parseInt(color.slice(index, index + 2), 16));
+  const darkBackground = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000 < 150;
+  document.body.dataset.theme = theme.mode;
+  document.body.style.setProperty('--custom-background', color);
+  document.body.style.setProperty('--custom-ink', darkBackground ? '#fffaf6' : '#292523');
+  document.body.style.setProperty('--custom-muted', darkBackground ? '#d8d0ca' : '#665e59');
+  document.body.style.setProperty('--custom-line', darkBackground ? 'rgba(255,255,255,.35)' : 'rgba(41,37,35,.28)');
+}
+function saveTheme(mode, color = theme.color) {
+  theme = { mode, color };
+  applyTheme();
+  try { localStorage.setItem(themeStorageKey, JSON.stringify(theme)); } catch { /* Browser storage may be unavailable. */ }
+}
+applyTheme();
 let startupError = '';
 let loginEmail = '';
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[c]));
@@ -127,12 +151,30 @@ async function loadGames() {
 function renderLibrary() {
   const games = state.games.filter(g => g.name.toLowerCase().includes(state.search.toLowerCase()));
   const noteCount = state.games.reduce((n, g) => n + g.notes.length, 0), memoryCount = state.games.reduce((n, g) => n + g.memories.length, 0);
-  app.innerHTML = `<section class="shell"><aside class="sidebar"><img class="side-logo" src="page_example/usepng/logo.png" alt="Game Note logo"><div class="side-title">遊戲旅程筆記</div><nav class="side-links"><button type="button">⚙ 設定</button><button id="logout" type="button">↪ 登出</button></nav></aside><section class="content-panel"><header class="topbar"><h1>GAME NOTE</h1><input class="search" id="search" value="${escapeHtml(state.search)}" placeholder="搜尋遊戲"><span>${escapeHtml(state.user?.email || '')}</span></header><div class="section-head"><h2>我的遊戲庫</h2><button class="primary" id="addGame">＋ 新增遊戲</button></div><div class="game-grid">${games.length ? games.map(gameCard).join('') : '<div class="empty">尚未建立遊戲，點選「新增遊戲」開始收藏吧！</div>'}</div></section><aside class="stats"><div class="stat">筆記數量<strong>${noteCount}</strong></div><div class="stat">紀念時刻<strong>${memoryCount}</strong></div><div class="stat">收藏遊戲<strong>${state.games.length}</strong></div></aside></section>`;
+  app.innerHTML = `<section class="shell"><aside class="sidebar"><img class="side-logo" src="page_example/usepng/logo.png" alt="Game Note logo"><div class="side-title">遊戲旅程筆記</div><nav class="side-links"><button id="settings" type="button">⚙ 設定</button><button id="logout" type="button">↪ 登出</button></nav></aside><section class="content-panel"><header class="topbar"><h1>GAME NOTE</h1><input class="search" id="search" value="${escapeHtml(state.search)}" placeholder="搜尋遊戲"><span>${escapeHtml(state.user?.email || '')}</span></header><div class="section-head"><h2>我的遊戲庫</h2><button class="primary" id="addGame">＋ 新增遊戲</button></div><div class="game-grid">${games.length ? games.map(gameCard).join('') : '<div class="empty">尚未建立遊戲，點選「新增遊戲」開始收藏吧！</div>'}</div></section><aside class="stats"><div class="stat">筆記數量<strong>${noteCount}</strong></div><div class="stat">紀念時刻<strong>${memoryCount}</strong></div><div class="stat">收藏遊戲<strong>${state.games.length}</strong></div></aside></section>`;
+  document.querySelector('#settings').onclick = openSettingsModal;
   document.querySelector('#logout').onclick = async () => { await db.auth.signOut(); state.view = 'login'; state.user = null; state.games = []; render(); };
   document.querySelector('#addGame').onclick = () => openGameModal();
   document.querySelector('#search').oninput = e => { state.search = e.target.value; renderLibrary(); document.querySelector('#search').focus(); };
   document.querySelectorAll('[data-game]').forEach(el => el.onclick = () => { state.currentGameId = el.dataset.game; state.view = 'detail'; render(); });
   document.querySelectorAll('[data-delete-game]').forEach(el => el.onclick = () => deleteGame(el.dataset.deleteGame));
+}
+function openSettingsModal() {
+  const options = [
+    ['light', '白色背景', '乾淨明亮'],
+    ['dark', '黑色背景', '適合夜間使用'],
+    ['custom', '自訂背景色', '選擇喜歡的顏色']
+  ];
+  showModal(`<div class="settings-panel"><h2>設定</h2><p class="settings-intro">背景顏色</p><div class="theme-options">${options.map(([mode, label, description]) => `<label class="theme-option"><input type="radio" name="backgroundTheme" value="${mode}" ${theme.mode === mode ? 'checked' : ''}><span class="theme-swatch theme-swatch-${mode}" ${mode === 'custom' ? `style="background:${theme.color}"` : ''}></span><span><strong>${label}</strong><small>${description}</small></span></label>`).join('')}</div><div class="custom-color-row"><label for="customBackground">選擇顏色</label><input id="customBackground" type="color" value="${theme.color}"><output id="customColorValue">${theme.color.toUpperCase()}</output></div><div class="actions"><button class="primary" data-close type="button">完成</button></div></div>`);
+  document.querySelectorAll('input[name="backgroundTheme"]').forEach(input => {
+    input.onchange = () => saveTheme(input.value);
+  });
+  document.querySelector('#customBackground').oninput = event => {
+    saveTheme('custom', event.target.value);
+    document.querySelector('input[value="custom"]').checked = true;
+    document.querySelector('.theme-swatch-custom').style.background = theme.color;
+    document.querySelector('#customColorValue').textContent = theme.color.toUpperCase();
+  };
 }
 function gameCard(g) {
   const cover = g.cover_url ? `<img src="${escapeHtml(g.cover_url)}" alt="${escapeHtml(g.name)}">` : escapeHtml(g.name.slice(0, 1).toUpperCase());
