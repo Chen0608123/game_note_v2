@@ -236,7 +236,7 @@ function renderDetail() {
   document.querySelectorAll('[data-delete]').forEach(el => el.onclick = () => deleteEntry(el.dataset.delete));
   document.querySelectorAll('[data-view-entry]').forEach(card => {
     card.onclick = event => {
-      if (event.target.closest('button, a, video')) return;
+      if (event.target.closest('button, a, video, img[data-zoom-image]')) return;
       openEntryDetail(list[Number(card.dataset.viewEntry)], label);
     };
     card.onkeydown = event => {
@@ -249,7 +249,7 @@ function renderDetail() {
 }
 function entryMedia(item, detail = false) {
   const mediaClass = detail ? 'detail-media' : 'entry-media';
-  if (item.entry_type === '圖片' && item.media_url) return `<img class="${mediaClass}" src="${escapeHtml(item.media_url)}" alt="${escapeHtml(item.title)}">`;
+  if (item.entry_type === '圖片' && item.media_url) return `<img class="${mediaClass} zoomable-image" src="${escapeHtml(item.media_url)}" alt="${escapeHtml(item.title)}" data-zoom-image role="button" tabindex="0" aria-label="放大圖片：${escapeHtml(item.title)}">`;
   if (item.entry_type === '影片' && item.media_url) return `<video class="${mediaClass}" src="${escapeHtml(item.media_url)}" controls preload="metadata"></video>`;
   return '';
 }
@@ -378,5 +378,44 @@ async function uploadEntryMedia(file, type) {
 }
 function showModal(content) { document.body.insertAdjacentHTML('beforeend', `<div class="modal-wrap" id="modal"><div class="modal">${content}</div></div>`); document.querySelectorAll('[data-close]').forEach(el => el.onclick = closeModal); document.querySelector('#modal').onclick = e => { if (e.target.id === 'modal') closeModal(); }; }
 function closeModal() { document.querySelector('#modal')?.remove(); }
+function openImageViewer(sourceImage) {
+  if (document.querySelector('#imageViewer')) return;
+  const viewer = document.createElement('div');
+  viewer.id = 'imageViewer';
+  viewer.className = 'image-viewer';
+  viewer.setAttribute('role', 'dialog');
+  viewer.setAttribute('aria-modal', 'true');
+  viewer.setAttribute('aria-label', '放大圖片');
+  viewer.innerHTML = '<button class="image-viewer-close" type="button" aria-label="關閉圖片">✕</button><img class="image-viewer-picture" alt=""><p class="image-viewer-caption"></p>';
+  viewer.querySelector('img').src = sourceImage.src;
+  viewer.querySelector('img').alt = sourceImage.alt;
+  viewer.querySelector('.image-viewer-caption').textContent = sourceImage.alt;
+  const previousOverflow = document.body.style.overflow;
+  const close = () => {
+    viewer.remove();
+    document.body.style.overflow = previousOverflow;
+    document.removeEventListener('keydown', onKeyDown);
+    if (sourceImage.isConnected) sourceImage.focus();
+  };
+  const onKeyDown = event => { if (event.key === 'Escape') close(); };
+  viewer.onclick = event => { if (event.target === viewer || event.target.closest('.image-viewer-close')) close(); };
+  document.body.append(viewer);
+  document.body.style.overflow = 'hidden';
+  document.addEventListener('keydown', onKeyDown);
+  viewer.querySelector('.image-viewer-close').focus();
+}
+document.addEventListener('click', event => {
+  const image = event.target.closest('img[data-zoom-image]');
+  if (!image) return;
+  event.preventDefault();
+  event.stopPropagation();
+  openImageViewer(image);
+}, true);
+document.addEventListener('keydown', event => {
+  if (!['Enter', ' '].includes(event.key) || !event.target.matches('img[data-zoom-image]')) return;
+  event.preventDefault();
+  event.stopPropagation();
+  openImageViewer(event.target);
+}, true);
 function readImage(file, done) { if (!file) return; const reader = new FileReader(); reader.onload = () => done(reader.result); reader.readAsDataURL(file); }
 start();
