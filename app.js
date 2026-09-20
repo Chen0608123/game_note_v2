@@ -234,6 +234,7 @@ function renderDetail() {
   document.querySelectorAll('[data-tab]').forEach(el => el.onclick = () => { state.tab = el.dataset.tab; render(); });
   document.querySelector('#addEntry').onclick = () => openEntryModal(game);
   document.querySelectorAll('[data-delete]').forEach(el => el.onclick = () => deleteEntry(el.dataset.delete));
+  document.querySelectorAll('[data-edit-entry]').forEach(el => el.onclick = () => openEntryModal(game, list[Number(el.dataset.editEntry)]));
   document.querySelectorAll('[data-view-entry]').forEach(card => {
     card.onclick = event => {
       if (event.target.closest('button, a, video, img[data-zoom-image]')) return;
@@ -256,7 +257,7 @@ function entryMedia(item, detail = false) {
 function entryCard(item, index) {
   const media = entryMedia(item);
   const link = item.link_url ? `<a class="entry-link" href="${escapeHtml(item.link_url)}" target="_blank" rel="noreferrer">開啟${item.entry_type === '影片' ? '影片' : '連結'} ↗</a>` : '';
-  return `<article class="entry entry-clickable ${item.kind === 'note' ? 'note-entry' : ''}" data-view-entry="${index}" role="button" tabindex="0" aria-label="查看 ${escapeHtml(item.title)}"><button class="delete" data-delete="${item.id}" aria-label="刪除">✕</button><h3>${escapeHtml(item.title)}</h3>${media}<p>${escapeHtml(item.content)}</p>${link}</article>`;
+  return `<article class="entry entry-clickable ${item.kind === 'note' ? 'note-entry' : ''}" data-view-entry="${index}" role="button" tabindex="0" aria-label="查看 ${escapeHtml(item.title)}"><button class="delete" data-delete="${item.id}" aria-label="刪除">✕</button><h3>${escapeHtml(item.title)}</h3>${media}<p>${escapeHtml(item.content)}</p>${link}<button class="entry-edit" data-edit-entry="${index}" type="button" aria-label="編輯 ${escapeHtml(item.title)}">✎ 編輯</button></article>`;
 }
 function openEntryDetail(item, label) {
   if (!item) return;
@@ -333,15 +334,20 @@ async function uploadCover(file) {
   const { error } = await db.storage.from('game-covers').upload(path, file, { cacheControl: '3600' }); if (error) throw error;
   return db.storage.from('game-covers').getPublicUrl(path).data.publicUrl;
 }
-function openEntryModal(game) {
-  const isNote = state.tab === 'notes';
-  showModal(`<h2>新增${isNote ? '筆記' : '紀念'}</h2><form id="entryForm"><div class="type-tabs">${(isNote ? ['文字','圖片','影片'] : ['圖片','影片','連結']).map((x,i) => `<button type="button" class="${i===0?'active':''}" data-type="${x}">${x}</button>`).join('')}</div><div class="field"><label for="entryTitle">${isNote ? '筆記標題' : '紀念文字'}</label><input id="entryTitle" required></div><div class="field"><label for="entryContent">${isNote ? '筆記內容' : '介紹文字'}</label><textarea id="entryContent" rows="6" required></textarea></div><div id="mediaFields"></div><div class="actions"><button class="secondary" data-close type="button">取消</button><button class="primary" type="submit">完成</button></div></form>`);
-  let entryType = isNote ? '文字' : '圖片';
+function openEntryModal(game, item = null) {
+  const editing = Boolean(item);
+  const isNote = editing ? item.kind === 'note' : state.tab === 'notes';
+  const types = isNote ? ['文字','圖片','影片'] : ['圖片','影片','連結'];
+  let entryType = editing && types.includes(item.entry_type) ? item.entry_type : types[0];
+  showModal(`<h2>${editing ? '編輯' : '新增'}${isNote ? '筆記' : '紀念'}</h2><form id="entryForm"><div class="type-tabs">${types.map(x => `<button type="button" class="${x === entryType ? 'active' : ''}" data-type="${x}">${x}</button>`).join('')}</div><div class="field"><label for="entryTitle">${isNote ? '筆記標題' : '紀念文字'}</label><input id="entryTitle" value="${escapeHtml(item?.title || '')}" required></div><div class="field"><label for="entryContent">${isNote ? '筆記內容' : '介紹文字'}</label><textarea id="entryContent" rows="6" required>${escapeHtml(item?.content || '')}</textarea></div><div id="mediaFields"></div><div class="actions"><button class="secondary" data-close type="button">取消</button><button class="primary" type="submit">${editing ? '儲存修改' : '完成'}</button></div></form>`);
   const renderMediaFields = () => {
     const box = document.querySelector('#mediaFields');
-    if (entryType === '圖片') box.innerHTML = '<div class="field"><label for="entryFile">選擇圖片檔案</label><input id="entryFile" type="file" accept="image/*" required><small>圖片上限 10 MB</small></div>';
-    else if (entryType === '影片') box.innerHTML = '<div class="field"><label for="entryFile">選擇影片檔案（與連結擇一）</label><input id="entryFile" type="file" accept="video/*"><small>影片上限 50 MB</small></div><div class="field"><label for="entryLink">影片連結（與檔案擇一）</label><input id="entryLink" type="url" placeholder="https://"></div>';
-    else if (entryType === '連結') box.innerHTML = '<div class="field"><label for="entryLink">紀念連結</label><input id="entryLink" type="url" placeholder="https://" required></div>';
+    const keepsCurrentType = editing && entryType === item.entry_type;
+    const currentFile = keepsCurrentType && item.media_url ? '<small>未選擇新檔案時，會保留目前檔案。</small>' : '';
+    const currentLink = keepsCurrentType ? item.link_url || '' : '';
+    if (entryType === '圖片') box.innerHTML = `<div class="field"><label for="entryFile">${editing ? '更換圖片檔案' : '選擇圖片檔案'}</label><input id="entryFile" type="file" accept="image/*"><small>圖片上限 10 MB</small>${currentFile}</div>`;
+    else if (entryType === '影片') box.innerHTML = `<div class="field"><label for="entryFile">${editing ? '更換影片檔案' : '選擇影片檔案'}（與連結擇一）</label><input id="entryFile" type="file" accept="video/*"><small>影片上限 50 MB</small>${currentFile}</div><div class="field"><label for="entryLink">影片連結（與檔案擇一）</label><input id="entryLink" type="url" value="${escapeHtml(currentLink)}" placeholder="https://"></div>`;
+    else if (entryType === '連結') box.innerHTML = `<div class="field"><label for="entryLink">紀念連結</label><input id="entryLink" type="url" value="${escapeHtml(currentLink)}" placeholder="https://" required></div>`;
     else box.innerHTML = '';
   };
   renderMediaFields();
@@ -350,8 +356,11 @@ function openEntryModal(game) {
     e.preventDefault(); e.submitter.disabled = true;
     const file = document.querySelector('#entryFile')?.files[0] || null;
     const linkUrl = document.querySelector('#entryLink')?.value.trim() || null;
-    if (entryType === '影片' && !file && !linkUrl) { e.submitter.disabled = false; return message('請選擇影片檔案或輸入影片連結。'); }
-    let mediaUrl = null;
+    const keepsCurrentType = editing && entryType === item.entry_type;
+    const existingMediaUrl = keepsCurrentType ? item.media_url || null : null;
+    if (entryType === '圖片' && !file && !existingMediaUrl) { e.submitter.disabled = false; return message('請選擇圖片檔案。'); }
+    if (entryType === '影片' && !file && !linkUrl && !existingMediaUrl) { e.submitter.disabled = false; return message('請選擇影片檔案或輸入影片連結。'); }
+    let mediaUrl = existingMediaUrl;
     if (file) {
       try { mediaUrl = await uploadEntryMedia(file, entryType); }
       catch (error) { e.submitter.disabled = false; return message(`檔案上傳失敗：${error.message}`); }
@@ -360,8 +369,16 @@ function openEntryModal(game) {
     try { userId = await requireUserId(); }
     catch (error) { e.submitter.disabled = false; return message(error.message); }
     const row = { game_id: game.id, user_id: userId, kind: isNote ? 'note' : 'memory', entry_type: entryType, title: document.querySelector('#entryTitle').value.trim(), content: document.querySelector('#entryContent').value.trim(), link_url: linkUrl, media_url: mediaUrl };
-    const { error } = await db.from('entries').insert(row); if (error) { e.submitter.disabled = false; return message(`新增失敗：${error.message}`); }
+    const { error } = editing
+      ? await db.from('entries').update(row).eq('id', item.id)
+      : await db.from('entries').insert(row);
+    if (error) { e.submitter.disabled = false; return message(`${editing ? '修改' : '新增'}失敗：${error.message}`); }
+    if (editing && item.media_url && item.media_url !== mediaUrl) {
+      const oldPath = getStoragePath(item.media_url, 'entry-media');
+      if (oldPath) await db.storage.from('entry-media').remove([oldPath]);
+    }
     closeModal(); await loadGames(); render();
+    if (editing) message(`已更新${isNote ? '筆記' : '紀念'}。`);
   };
 }
 async function uploadEntryMedia(file, type) {
